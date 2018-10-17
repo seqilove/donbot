@@ -126,7 +126,7 @@ def cli(task, config, auto, duration, wait, max_click, skip, close, cashout, sol
         except KeyboardInterrupt:
             break
         except Exception as e:
-            print(e)
+            raise
             time.sleep(10)
 
 
