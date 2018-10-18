@@ -333,6 +333,7 @@ class Ameb(SeleTask):
                 self.am_clean_swal2()
                 if ads is None:
                     self.am_scroll()
+                    time.sleep(5)
                     fall = self.s.driver.find_element(*self.am_locators['fall'])
                     ads = fall.find_element(*self.am_locators['ads'])
                 else:
