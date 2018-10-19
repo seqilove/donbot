@@ -848,7 +848,10 @@ class Ameb(SeleTask):
 
                 if start:
                     if cashout:
-                        self.am_cashout()
+                        try:
+                            self.am_cashout()
+                        except Exception as e:
+                            self.logger.exception(e)
                     self.am_daily_check()
 
                     self.logger.debug(
