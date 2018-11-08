@@ -1,4 +1,5 @@
 import datetime
+import json
 import sys
 import time
 
@@ -14,8 +15,6 @@ from apps.seletask import SeleTask, new_windows_opened
 from utils.telegram import get_tg
 
 
-cookies = None
-
 class Koinme(SeleTask):
 
     urls = {
@@ -27,7 +26,6 @@ class Koinme(SeleTask):
 
     def __init__(self, config):
         super().__init__(config)
-        # self.cookies = None
 
     def get_task_name(self):
         task_name = []
@@ -78,37 +76,16 @@ class Koinme(SeleTask):
                     # if not self.check_offers_url(offers_h):
                     #     continue
                     try:
-                        self.s.driver.switch_to.window(offers_h)
+                        try:
+                            self.s.driver.switch_to.window(offers_h)
+                        except NoSuchWindowException:
+                            offers_h = None
+                            continue
                         if self.s.driver.current_url != self.urls['offers']:
                             self.visit_offers_page()
 
                         if offer_h is None:
                             try:
-                                try:
-                                    invalid_session = self.s.driver.find_element(By.ID, '#action-button-box')
-                                    if invalid_session.text == 'Invalid session.':
-                                        time.sleep(30 * 60)
-                                        continue
-                                except NoSuchElementException:
-                                    pass
-                                try:
-                                    out_offer = self.s.driver.find_element(By.XPATH, '//h3[contains(., "out of offers")]')
-                                    # Looks like we're all out of offers for the moments. Please check back later for more!
-                                    self.logger.debug("Looks like we're all out of offers for the moments. Please check back later for more!")
-                                    self.s.get(self.urls['refer'])
-                                    time.sleep(30 * 60)
-                                    continue
-                                except NoSuchElementException:
-                                    pass
-                                try:
-                                    no_offer = self.s.driver.find_element(By.XPATH, '//h3[contains(., "No offers")]')
-                                    # No offers currently available at this time.
-                                    self.logger.debug("No offers currently available at this time.")
-                                    self.s.get(self.urls['refer'])
-                                    time.sleep(30 * 60)
-                                    continue
-                                except NoSuchElementException:
-                                    pass
                                 _windows = self.s.driver.window_handles
                                 offer = self.s.find_element((By.XPATH, '//a[@class="start-offer"]/img'))
                                 # offer.click()
@@ -120,29 +97,26 @@ class Koinme(SeleTask):
                                     offer_h = _new_open_windows[0]
                             except (NoSuchElementException, TimeoutException) as e:
                                 time.sleep(10)
+                                try:
+                                    info = self.s.driver.find_element(By.XPATH, '//h3')
+                                    # info = self.s.driver.find_element(By.XPATH, '//div#pjbox/h3')
+                                    info_text = info.get_attribute('innerText')
+                                except (NoSuchElementException, TimeoutException) as e:
+                                    info_text = 'No offers found!'
+                                self.logger.debug(info_text)
+                                self.logger.debug('wait %s seconds', 30 * 60)
+                                time.sleep(30 * 60)
                             continue
                         else:
                             try:
-                                self.s.driver.switch_to.window(offer_h)
+                                try:
+                                    self.s.driver.switch_to.window(offer_h)
+                                except NoSuchWindowException:
+                                    offer_h = None
+                                    continue
 
                                 if self.s.driver.current_url == self.urls['offers']:
                                     self.visit_offers_page()
-                                    try:
-                                        out_offer = self.s.driver.find_element(By.XPATH, '//h3[contains(., "out of offers")]')
-                                        # Looks like we're all out of offers for the moments. Please check back later for more!
-                                        self.logger.debug("Looks like we're all out of offers for the moments. Please check back later for more!")
-                                        time.sleep(30 * 60)
-                                        continue
-                                    except NoSuchElementException:
-                                        pass
-                                    try:
-                                        no_offer = self.s.driver.find_element(By.XPATH, '//h3[contains(., "No offers")]')
-                                        # No offers currently available at this time.
-                                        self.logger.debug("No offers currently available at this time.")
-                                        time.sleep(30 * 60)
-                                        continue
-                                    except NoSuchElementException:
-                                        pass
                                     try:
                                         offer = self.s.driver.find_element(By.XPATH, '//a[@class="start-offer"]/img')
                                         self.s.close_handles(self.s.driver.window_handles, exclude=[offers_h, offer_h])
@@ -151,9 +125,18 @@ class Koinme(SeleTask):
                                         last_t = None
                                         self.logger.debug('wait 60 seconds')
                                         time.sleep(60)
-                                        continue
-                                    except NoSuchElementException:
-                                        pass
+                                    except (NoSuchElementException, TimeoutException):
+                                        time.sleep(10)
+                                        try:
+                                            info = self.s.driver.find_element(By.XPATH, '//h3')
+                                            # info = self.s.driver.find_element(By.XPATH, '//div#pjbox/h3')
+                                            info_text = info.get_attribute('innerText')
+                                        except NoSuchElementException as e:
+                                            info_text = 'No offers found!'
+                                        self.logger.debug(info_text)
+                                        self.logger.debug('wait %s seconds', 30 * 60)
+                                        time.sleep(30 * 60)
+                                    continue
                                 else:
                                     if auto:
                                         self.logger.debug('wait %s seconds', wait)
@@ -161,7 +144,7 @@ class Koinme(SeleTask):
                                     else:
                                         try:
                                             self.s.driver.find_element(By.ID, 'clock')
-                                        except (NoSuchElementException, ):
+                                        except (NoSuchElementException, TimeoutException):
                                             self.s.driver.refresh()
                                             last_t = None
                                             time.sleep(10)
@@ -174,7 +157,7 @@ class Koinme(SeleTask):
                                             last_t = datetime.datetime.now()
                                             self.logger.debug('wait %s seconds', wait)
                                             time.sleep(wait)
-                                        except NoSuchElementException:
+                                        except (NoSuchElementException, TimeoutException):
                                             if last_t is None:
                                                 last_t = datetime.datetime.now()
                                                 self.logger.debug('wait %s seconds', wait)
@@ -218,7 +201,7 @@ class Koinme(SeleTask):
                 if e.msg in b:
                     self.logger.exception(e)
                     time.sleep(5)
-                    self.s.kill(profile_persist=True)
+                    self.s.kill()
                     offers_h, offer_h = None, None
                     time.sleep(5)
                 else:
@@ -232,27 +215,51 @@ class Koinme(SeleTask):
                 offers_h, offer_h = None, None
                 last_t = None
 
+    def add_cookie(self):
+        cookies = None
+        if self.cookie_path.exists():
+            with open(self.cookie_path, 'r') as fp:
+                try:
+                    cookies = json.load(fp)
+                except json.JSONDecodeError:
+                    self.delete_cookie()
+        if cookies:
+            for c in cookies:
+                if c.get('domain').startswith('.'):
+                    c['domain'] = c['domain'].split('.', 1)[-1]
+                self.s.driver.add_cookie(c)
+
+    def save_cookie(self):
+        cookies = self.s.driver.get_cookies()
+        print(cookies)
+        # cookies = [c for c in cookies if 'alexamaster.net' in c.get('domain')]
+        with open(self.cookie_path, 'w') as fp:
+            try:
+                json.dump(cookies, fp)
+            except Exception:
+                pass
+
     def visit_offers_page(self):
         self.s.get(self.urls['offers'])
         time.sleep(5)
         logged = False
+        login_action = False
         while not logged:
             if self.s.driver.current_url == self.urls['offers']:
                 logged = True
+                if login_action:
+                    self.save_cookie()
             else:
-                # self.s.driver.delete_all_cookies()
-                if cookies:
-                # if self.cookies:
-                    for c in cookies:
-                    # for c in self.cookies:
-                        if c.get('domain') == '.koinme.com':
-                            c['domain'] == 'koinme.com'
-                        self.s.driver.add_cookie(c)
+                login_action = False
+                self.add_cookie()
                 self.s.get(self.urls['offers'])
+                time.sleep(5)
                 if self.s.driver.current_url == self.urls['offers']:
                     logged = True
                 else:
+                    self.delete_cookie()
                     self.login()
+                    login_action = True
                     self.s.get(self.urls['offers'])
                     time.sleep(5)
 
@@ -289,9 +296,9 @@ class Koinme(SeleTask):
                 self.login()
             else:
                 raise e
-        cookies = self.s.driver.get_cookies()
+        # cookies = self.s.driver.get_cookies()
         # self.cookies = self.s.driver.get_cookies()
-        cookies = [c for c in cookies if 'koinme.com' in c.get('domain')]
+        # cookies = [c for c in cookies if 'koinme.com' in c.get('domain')]
         # self.cookies = [c for c in self.cookies if 'koinme.com' in c.get('domain')]
 
     def check_offers_url(self, offers_h):
@@ -309,3 +316,4 @@ class Koinme(SeleTask):
             raise e
 
         return result
+
