@@ -258,11 +258,13 @@ class Ameb(SeleTask):
                     self.logger.debug(title.get_attribute('innerText'))
                     _human = self.s.driver.find_element(By.XPATH, '//input[@value="I am a human!"]')
                     self.logger.debug('Check: eb has robot check!!!')
-                    _human.click()
+                    # _human.click()
+                    self.s.driver.execute_script("arguments[0].click();", _human)
                     time.sleep(5)
                     self.s.driver.switch_to.default_content()
                     _next = self.s.wait().until(EC.presence_of_element_located((By.XPATH, '//span[@id="skip"]/a')))
-                    _next.click()
+                    # _next.click()
+                    self.s.driver.execute_script("arguments[0].click();", _next)
                 except (NoSuchElementException, TimeoutException, WebDriverException) as e:
                     self.s.driver.switch_to.default_content()
                     # self.logger.exception(e)
@@ -346,20 +348,27 @@ class Ameb(SeleTask):
 
     def am_visite_earn_page(self):
         self.s.get(self.am_urls['earn'])
-        if self.am_urls['earn'] not in self.s.driver.current_url:
-            self.add_cookie()
-            self.s.get(self.am_urls['earn'])
-            if self.am_urls['earn'] not in self.s.driver.current_url:
+        time.sleep(5)
+        logged = False
+        login_action = False
+        while not logged:
+            if self.s.driver.current_url == self.am_urls['earn']:
+                logged = True
+                if login_action:
+                    self.save_cookie()
+            else:
+                login_action = False
+                self.add_cookie()
+                self.s.get(self.am_urls['earn'])
+                time.sleep(5)
+            if self.s.driver.current_url == self.am_urls['earn']:
+                logged = True
+            else:
                 self.delete_cookie()
                 self.am_login()
-                _earn = self.s.find_element(self.am_locators['earn'])
-                # self.s.click(_earn)
+                login_action = True
                 self.s.get(self.am_urls['earn'])
-        if self.am_urls['earn'] not in self.s.driver.current_url:
-            self.logger.debug('Am login failed.')
-        else:
-            self.logger.debug('Am login successed.')
-            self.save_cookie()
+                time.sleep(5)
 
     def am_get_next_ads(self, ads):
         _tries = 3
@@ -675,21 +684,25 @@ class Ameb(SeleTask):
                             _new_handle = _new_open_handles[0]
                     else:
                         continue
+                    time.sleep(random.randint(3, 6))
                     self.logger.debug('Switch to new window')
                     while True:
                         try:
                             self.s.driver.switch_to.window(_new_handle)
-                            time.sleep(random.randint(15, 20))
+                            time.sleep(random.randint(20, 30))
                             bgcolor = self.get_bgcolor()
                             break
                         except UnexpectedAlertPresentException:
                             self.s.close_alert()
                     self.logger.debug('Get bgcolor %s, and back to c_handle', bgcolor)
                     self.s.driver.switch_to.window(c_handle)
+                    time.sleep(random.randint(3, 6))
                     good = self.s.wait().until(EC.presence_of_element_located(self.am_locators['confirm']))
+                    time.sleep(random.randint(3, 6))
                     self.s.wait().until(EC.text_to_be_present_in_element(self.am_locators['confirm'], 'Good'))
                     time.sleep(2)
                     good.click()
+                    time.sleep(random.randint(3, 6))
                     color_select = self.s.wait().until(EC.presence_of_element_located((By.ID, 'backcol')))
                     color_select = Select(color_select)
                     color_values = ['#' + c.get_attribute('value') for c in color_select.options]
@@ -734,21 +747,23 @@ class Ameb(SeleTask):
                             _new_handle = _new_open_handles[0]
                     else:
                         continue
+                    time.sleep(random.randint(3, 6))
                     self.logger.debug('Switch to new window')
                     self.s.driver.switch_to.window(_new_handle)
-                    time.sleep(random.randint(15, 20))
+                    time.sleep(random.randint(20, 30))
                     length = self.get_ytb_length()
                     self.logger.debug('Get video length %s, and back to c_handle', length)
                     self.s.driver.switch_to.window(c_handle)
+                    time.sleep(random.randint(3, 6))
                     length_select = self.s.wait().until(EC.presence_of_element_located((By.ID, 'vlen')))
                     length_select = Select(length_select)
                     try:
-                        right_lengt = self.get_right_length(length)
+                        right_lengt = self.get_right_length(length, no=1)
                         time.sleep(2)
                         length_select.select_by_value(right_lengt)
                     except NoSuchElementException:
                         try:
-                            right_lengt = self.get_right_length(length)
+                            right_lengt = self.get_right_length(length, no=2)
                             time.sleep(2)
                             length_select.select_by_value(right_lengt)
                         except NoSuchElementException:
@@ -756,10 +771,12 @@ class Ameb(SeleTask):
                             continue
                     time.sleep(1)
                     length_submit = self.s.driver.find_element(*self.am_locators['confirm'])
-                    length_submit.click()
+                    # length_submit.click()
+                    self.s.driver.execute_script("arguments[0].click();", length_submit)
+                    time.sleep(random.randint(3, 6))
                     self.logger.debug('Ok, clean mess')
                     self.s.close_handles(self.s.driver.window_handles, exclude=[c_handle])
-                    time.sleep(1)
+                    time.sleep(random.randint(2, 4))
                     self.logger.debug('go to c_handle')
                     self.s.driver.switch_to.window(c_handle)
                 except SkipAdsException:
@@ -783,7 +800,8 @@ class Ameb(SeleTask):
                     self.s.driver.switch_to.window(c_handle)
                     self.logger.debug('Check swal pop and clean it')
                     self.am_clean_swal2()
-                    ads_inner.click()
+                    # ads_inner.click()
+                    self.s.driver.execute_script("arguments[0].click();", ads_inner)
                     if self.s.wait().until(new_windows_opened(_handles)):
                         _new_open_handles = [h for h in self.s.driver.window_handles if h not in _handles]
                         if len(_new_open_handles) == 0:
@@ -1073,7 +1091,8 @@ class Ameb(SeleTask):
                 try:
                     hide_button = self.s.driver.find_element(By.ID, 'hide_button')
                     if hide_button.get_attribute('innerText') == 'Hide all read emails':
-                        hide_button.click()
+                        # hide_button.click()
+                        self.s.driver.execute_script("arguments[0].click();", hide_button)
                         time.sleep(5)
                         continue
                     elif hide_button.get_attribute('innerText') == 'Show all read emails':
@@ -1109,7 +1128,8 @@ class Ameb(SeleTask):
             try:
                 self.s.driver.switch_to.window(eb_handle)
                 _windows = self.s.driver.window_handles
-                mail.click()
+                # mail.click()
+                self.s.driver.execute_script("arguments[0].click();", mail)
                 _new_open_windows = self.s.wait().until(new_windows_opened(_windows))
                 time.sleep(5)
                 if _new_open_windows:
@@ -1125,7 +1145,8 @@ class Ameb(SeleTask):
                     first_link = self.s.find_element((By.XPATH, '//a[contains(@href, "ebesucher.com/mailcheck.php")]'))
                     first_link_target = first_link.get_attribute('target')
                     _windows = self.s.driver.window_handles
-                    first_link.click()
+                    # first_link.click()
+                    self.s.driver.execute_script("arguments[0].click();", first_link)
                     ad_handle = mail_handle
                     if first_link_target == '_blank':
                         _new_open_windows = self.s.wait().until(new_windows_opened(_windows))
