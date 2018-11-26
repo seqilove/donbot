@@ -2,6 +2,7 @@ FROM ubuntu:xenial
 
 RUN apt-get update && apt-get install -y \
     python3 python3-pip \
+    software-properties-common \
     curl wget
 
 # install geckodriver and firefox
@@ -14,7 +15,7 @@ RUN GECKODRIVER_VERSION=`curl https://github.com/mozilla/geckodriver/releases/la
 RUN add-apt-repository -y ppa:ubuntu-mozilla-daily/ppa
 RUN apt-get update && apt-get install -y firefox
 
-RUN pip3 install selenium
+# RUN pip3 install selenium
 # RUN pip3 install pyvirtualdisplay
 
 ENV LANG C.UTF-8
@@ -26,4 +27,4 @@ WORKDIR $APP_HOME
 COPY . $APP_HOME/donbot
 
 WORKDIR $APP_HOME/donbot
-RUN pip3 install -r requirements.txt
+RUN pip3 install --upgrade pip && pip3 install -r requirements.txt
