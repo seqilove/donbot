@@ -20,10 +20,6 @@ if you want use telegram notification, set telegram config at utils/telegram.cfg
 
 # you can use yes y true t or 1 for YES, and no n false f or 0 for NO.
 
-Koinme
--c --config default.cfg#4
--a YES or NO             if your account can auto view, choose YES, or choose NO
-
 Ameb
 # Run am autoview and eb autoview in one firefox
 -c --config default.cfg#2
