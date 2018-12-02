@@ -9,8 +9,14 @@ from pathlib import Path
 import arrow
 
 from selenium.common.exceptions import (
-    NoSuchElementException, NoSuchFrameException, NoSuchWindowException, TimeoutException, WebDriverException, StaleElementReferenceException,
-    UnexpectedAlertPresentException
+    NoSuchElementException,
+    NoSuchFrameException,
+    NoSuchWindowException,
+    TimeoutException,
+    WebDriverException,
+    StaleElementReferenceException,
+    UnexpectedAlertPresentException,
+    ElementNotInteractableException
 )
 from selenium.webdriver.common.action_chains import ActionChains as AC
 from selenium.webdriver.common.by import By
@@ -58,6 +64,7 @@ class Ameb(SeleTask):
         'earn': 'https://www.alexamaster.net/a/earn_points.php',
         'pay': 'https://www.alexamaster.net/a/payout_list.php',
         'surf': 'https://www.alexamaster.net/Master/',
+        'register': 'https://www.alexamaster.net/sec/register.php',
     }
 
     eb_locators = {
@@ -114,12 +121,18 @@ class Ameb(SeleTask):
     def ameb(self, cron=False, duration=None, wait=None):
         am_url = self.extra.get('am_url')
         if am_url:
-            am_url = self.am_urls['surf'] + am_url
+            if am_url.startswith(self.am_urls['surf']):
+                pass
+            else:
+                am_url = self.am_urls['surf'] + am_url
         eb_url = self.extra.get('eb_url')
         if eb_url:
-            eb_url = self.eb_urls['surf'] + eb_url
+            if eb_url.startswith(self.eb_urls['surf']):
+                pass
+            else:
+                eb_url = self.eb_urls['surf'] + eb_url
 
-        if am_url is None and eb_url is None:
+        if not am_url and not eb_url:
             self.logger.debug('Please set at least one, am_url and eb_url')
             self.logger.debug('Exit')
             self.s.kill()
@@ -302,6 +315,28 @@ class Ameb(SeleTask):
                 continue
         self.logger.debug('Check: am_check done')
 
+    def am_register(self):
+        self.s.get(self.am_urls['register'])
+        first_name = self.s.find_element(By.XPATH, '//input[contains(@placeholder, "Your first name")]')
+        surname = self.s.find_element(By.XPATH, '//input[contains(@placeholder, "Your surname")]')
+        username = self.s.find_element(By.XPATH, '//input[contains(@placeholder, "Your email address")]')
+        password = self.s.find_element(*self.am_lacators['password'])
+        self.s.clear(first_name)
+        first_name.send_keys(self.extra['am_fn'])
+        time.sleep(1)
+        self.s.clear(surname)
+        surname.send_keys(self.extra['am_sn'])
+        time.sleep(1)
+        self.s.clear(username)
+        username.send_keys(self.extra['am_un'])
+        time.sleep(1)
+        self.s.clear(password)
+        password.send_keys(self.extra['am_pw'])
+        checkbox = self.s.find_element(By.XPATH, '//input[@type="password"]')
+        checkbox.click()
+        time.sleep(3)
+        _go = self.s.driver.find_element(*self.am_locators['go'])
+        self.s.click(_go)
 
     def am_login(self):
         self.s.get(self.am_urls['home'])
@@ -395,7 +430,9 @@ class Ameb(SeleTask):
         return ads
 
     def am_scroll(self):
-        self.s.driver.execute_script('var toe = document.getElementById("toe");toe.scrollIntoView({block: "end", behavior: "smooth"});')
+        self.s.driver.execute_script(
+            'var toe = document.getElementById("toe");toe.scrollIntoView({block: "end", behavior: "smooth"});'
+        )
         time.sleep(random.randint(5, 8))
 
     def am_daily_check(self):
@@ -922,7 +959,11 @@ class Ameb(SeleTask):
                     self.am_daily_check()
 
                     self.logger.debug(
-                        'Task: %s, Click: %s, Max_click: %s, Duration: %s', self.task_name, click, max_click, duration / 60
+                        'Task: %s, Click: %s, Max_click: %s, Duration: %s',
+                        self.task_name,
+                        click,
+                        max_click,
+                        duration / 60
                     )
                     self.br_logger()
 
@@ -949,9 +990,6 @@ class Ameb(SeleTask):
                 if self.am_urls['earn'] not in self.s.driver.current_url:
                     self.am_visite_earn_page()
 
-                # if ads is None:
-                #     self.am_scroll()
-                # ads = retry(NoSuchElementException, hook=self.am_scroll, allfailcb=lambda: self.am_raise_webdriver("Can't find ads"))(self.am_get_next_ads)(ads)
                 ads = self.am_get_next_ads(ads)
                 if ads is None:
                     self.am_raise_webdriver("Can't find ads")
@@ -1014,38 +1052,6 @@ class Ameb(SeleTask):
         except NoSuchElementException:
             pass
 
-    # def eb_login(self):
-    #     r = 2
-    #     status = 0
-    #     while True:
-    #         try:
-    #             if self.s.driver.current_url != self.eb_urls['login']:
-    #                 self.s.get(self.eb_urls['login'])
-    #                 # continue
-    #             login_info = self.s.driver.find_element(By.ID, 'login_info')
-    #             if login_info.get_attribute('innerText'):
-    #                 self.logger.debug('Ebesucher %s', login_info.get_attribute('innerText'))
-    #                 status = 1
-    #                 self.eb_get_info()
-    #                 break
-    #             else:
-    #                 if r == 0:
-    #                     self.logger.debug('Ebesucher login error')
-    #                     break
-    #                 un_input = self.s.driver.find_element(*self.eb_locators['username'])
-    #                 pw_input = self.s.driver.find_element(*self.eb_locators['password'])
-    #                 self.s.clear(un_input)
-    #                 un_input.send_keys(self.extra['eb_un'])
-    #                 self.s.clear(pw_input)
-    #                 pw_input.send_keys(self.extra['eb_pw'])
-    #                 pw_input.submit()
-    #                 r -= 1
-    #                 time.sleep(5)
-    #         except NoSuchElementException:
-    #             pass
-
-    #     return status
-
     def eb_login(self):
         r = 2
         status = 0
@@ -1102,6 +1108,8 @@ class Ameb(SeleTask):
                             entries_select.select_by_value('100')
                         except NoSuchElementException:
                             pass
+                        except ElementNotInteractableException:
+                            break
                         time.sleep(5)
                 except NoSuchElementException:
                     break
@@ -1267,7 +1275,6 @@ class Ameb(SeleTask):
                     time.sleep(5)
                 continue
 
-
     def ameb_emu(self, max_click=None, duration=None, skip=None, close=False, cashout=True):
         click = 0
         c_handle = None
@@ -1322,7 +1329,11 @@ class Ameb(SeleTask):
                     self.am_daily_check()
 
                     self.logger.debug(
-                        'Task: %s, Click: %s, Max_click: %s, Duration: %s', self.task_name, click, max_click, duration / 60
+                        'Task: %s, Click: %s, Max_click: %s, Duration: %s',
+                        self.task_name,
+                        click,
+                        max_click,
+                        duration / 60
                     )
                     self.br_logger()
 
@@ -1352,9 +1363,6 @@ class Ameb(SeleTask):
                 if self.am_urls['earn'] not in self.s.driver.current_url:
                     self.am_visite_earn_page()
 
-                # if ads is None:
-                #     self.am_scroll()
-                # ads = retry(NoSuchElementException, hook=self.am_scroll, allfailcb=lambda: self.am_raise_webdriver("Can't find ads"))(self.am_get_next_ads)(ads)
                 ads = self.am_get_next_ads(ads)
                 if ads is None:
                     self.am_raise_webdriver("Can't find ads")
@@ -1367,7 +1375,6 @@ class Ameb(SeleTask):
                     self.file_logger.info('Points: %s', current_points)
                 else:
                     click = max_click
-
 
             except KeyboardInterrupt:
                 self.s.kill()
@@ -1403,4 +1410,3 @@ class Ameb(SeleTask):
                 raise
 
             self.br_logger()
-
