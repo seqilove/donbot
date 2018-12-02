@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -99,7 +100,8 @@ class BingTask(SeleTask):
                     id_l = WebDriverWait(self.s.driver, 30).until(EC.element_to_be_clickable((By.ID, 'id_l')))
                     # id_l = self.s.driver.find_element(By.ID, 'id_l')
                     id_l.click()
-                    # self.s.clickx(id_l)
+                    # id_l.send_keys(Keys.RETURN)
+                    self.s.clickx(id_l)
                     time.sleep(8)
                     un_input = self.s.find_element((By.NAME, 'loginfmt'))
                     # un_input = self.s.driver.find_element(By.NAME, "loginfmt")
@@ -169,7 +171,7 @@ class BingTask(SeleTask):
                     break
                 queries_len = len(queries)
                 while True:
-                # for query in queries:
+                    # for query in queries:
                     if num == 0:
                         break
                     query = queries[random.randint(1, queries_len)]
@@ -193,4 +195,3 @@ class BingTask(SeleTask):
                 self.logger.exception(e)
                 self.s.kill()
                 time.sleep(360)
-
