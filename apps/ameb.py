@@ -911,17 +911,15 @@ class Ameb(SeleTask):
         newargs = None
         _refresh = False
         default_args = [click, max_click, c_handle, ads, skip]
+        def kill_f():
+            self.s.kill()
+            c_handle, ads = None, None
+            time.sleep(10)
         while True:
             try:
-                # if new:
-                #     newargs = [click, max_click, c_handle, ads, skip]
-                #     new = False
-
                 if self.s.driver is None:
                     self.logger.debug('No browser')
                     self.s.start()
-                    # c_handle = self.s.driver.current_window_handle
-                    # self.am_visite_earn_page()
 
                 if start:
                     click, max_click, c_handle, ads, skip = default_args
@@ -971,12 +969,11 @@ class Ameb(SeleTask):
 
                 if click == max_click:
                     if close:
-                        self.s.kill()
+                        kill_f()
                     start = True
                     self.logger.debug('Finish, wait %s minutes to continue...', duration / 60)
                     time.sleep(duration)
                     continue
-                    # time.sleep(10)
                 elif click % 20 == 0:
                     time.sleep(random.randint(3, 5))
                     self.logger.debug('Refresh page')
@@ -1006,9 +1003,7 @@ class Ameb(SeleTask):
             except (ConnectionRefusedError):
                 self.logger.debug('Connection refused error, retry')
                 time.sleep(10)
-                self.s.kill()
-                c_handle, ads = None, None
-                time.sleep(10)
+                kill_f()
             except SkipAdsException:
                 time.sleep(random.randint(3, 5))
             except StaleElementReferenceException as e:
@@ -1022,22 +1017,18 @@ class Ameb(SeleTask):
                     ads = None
                 elif e.msg in self.errors['b']:
                     self.logger.debug('Error: %s, retry', e.msg)
-                    time.sleep(10)
-                    self.s.kill()
-                    c_handle, ads = None, None
-                    time.sleep(10)
+                    kill_f()
                 else:
                     self.logger.exception(e)
-                    time.sleep(10)
-                    self.s.kill()
+                    kill_f()
                     raise
             except KeyboardInterrupt:
                 self.logger.debug('quit')
-                self.s.kill()
+                kill_f()
                 raise
             except Exception as e:
                 self.logger.exception(e)
-                self.s.kill()
+                kill_f()
                 raise
 
             self.br_logger()
@@ -1056,77 +1047,67 @@ class Ameb(SeleTask):
         r = 2
         status = 0
         while True:
+            if self.extra['eb_un'] in self.s.driver.page_source:
+                status = 1
+                break
             try:
-                if self.s.driver.current_url != self.eb_urls['login']:
-                    self.s.get(self.eb_urls['login'])
-                    # continue
-                try:
-                    if r == 0:
-                        self.logger.debug('Ebesucher login error')
-                        break
-                    un_input = self.s.driver.find_element(*self.eb_locators['username'])
-                    pw_input = self.s.driver.find_element(*self.eb_locators['password'])
-                    self.s.clear(un_input)
-                    un_input.send_keys(self.extra['eb_un'])
-                    self.s.clear(pw_input)
-                    pw_input.send_keys(self.extra['eb_pw'])
-                    pw_input.submit()
-                    r -= 1
-                    time.sleep(5)
-                except NoSuchElementException:
-                    status = 1
+                if r == 0:
+                    self.logger.debug('Ebesucher login error')
                     break
+                self.s.get(self.eb_urls['login'])
+                un_input = self.s.driver.find_element(*self.eb_locators['username'])
+                pw_input = self.s.driver.find_element(*self.eb_locators['password'])
+                self.s.clear(un_input)
+                un_input.send_keys(self.extra['eb_un'])
+                self.s.clear(pw_input)
+                pw_input.send_keys(self.extra['eb_pw'])
+                pw_input.submit()
+                r -= 1
+                time.sleep(5)
             except NoSuchElementException:
-                pass
-
+                status = 1
+                break
         return status
 
     def eb_get_mails(self):
         mails = None
         while True:
+            self.s.get(self.eb_urls['inbox'])
+            if not self.eb_login():
+                break
+            self.s.get(self.eb_urls['inbox'])
+            time.sleep(5)
+
             try:
-                if self.s.driver.current_url != self.eb_urls['inbox']:
-                    self.s.get(self.eb_urls['inbox'])
-                    if self.s.driver.current_url != self.eb_urls['inbox']:
-                        if not self.eb_login():
-                            break
-                        self.s.get(self.eb_urls['inbox'])
+                hide_button = self.s.driver.find_element(By.ID, 'hide_button')
+                if hide_button.get_attribute('innerText') == 'Hide all read emails':
+                    # hide_button.click()
+                    self.s.driver.execute_script("arguments[0].click();", hide_button)
                     time.sleep(5)
                     continue
+                elif hide_button.get_attribute('innerText') == 'Show all read emails':
+                    try:
+                        entries_select = self.s.driver.find_element(By.NAME, 'example_length')
+                        entries_select = Select(entries_select)
+                        entries_select.select_by_value('100')
+                    except NoSuchElementException:
+                        pass
+                    except ElementNotInteractableException:
+                        break
+                    time.sleep(5)
+            except NoSuchElementException:
+                break
 
-                try:
-                    hide_button = self.s.driver.find_element(By.ID, 'hide_button')
-                    if hide_button.get_attribute('innerText') == 'Hide all read emails':
-                        # hide_button.click()
-                        self.s.driver.execute_script("arguments[0].click();", hide_button)
-                        time.sleep(5)
-                        continue
-                    elif hide_button.get_attribute('innerText') == 'Show all read emails':
-                        try:
-                            entries_select = self.s.driver.find_element(By.NAME, 'example_length')
-                            entries_select = Select(entries_select)
-                            entries_select.select_by_value('100')
-                        except NoSuchElementException:
-                            pass
-                        except ElementNotInteractableException:
-                            break
-                        time.sleep(5)
-                except NoSuchElementException:
-                    break
+            try:
+                example = self.s.find_element((By.ID, 'example'))
+                if example.is_displayed():
+                    # examples = example.find_elements(By.XPATH, '//tr/td[1]//a')
+                    # mails = [mail.get_attribute('href') for mail in examples]
+                    mails = example.find_elements(By.XPATH, '//tr/td[1]//a')
+                break
+            except NoSuchElementException:
+                break
 
-                try:
-                    example = self.s.find_element((By.ID, 'example'))
-                    if example.is_displayed():
-                        # examples = example.find_elements(By.XPATH, '//tr/td[1]//a')
-                        # mails = [mail.get_attribute('href') for mail in examples]
-                        mails = example.find_elements(By.XPATH, '//tr/td[1]//a')
-                    break
-                except NoSuchElementException:
-                    break
-
-            except Exception as e:
-                self.logger.exception(e)
-                raise
         return mails
 
     def eb_check_mail(self, eb_handle, mail):
@@ -1220,10 +1201,12 @@ class Ameb(SeleTask):
                     for mail in mails:
                         self.eb_check_mail(eb_handle, mail)
                         time.sleep(5)
+                    mails = None
                     self.logger.debug('Ebsucher mail check done')
                 if solo:
                     if cron:
                         self.s.kill()
+                        eb_handle, mails = (None, None)
                         sys.exit()
                     else:
                         if duration is None:
@@ -1242,6 +1225,7 @@ class Ameb(SeleTask):
                         pass
                     else:
                         self.s.kill()
+                        eb_handle, mails = (None, None)
                     self.logger.debug('Exit')
                     raise
                 else:
