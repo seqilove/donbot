@@ -241,10 +241,10 @@ class FirefoxPlus(object):
         try:
             self.driver.implicitly_wait(10)
             self.driver.get(url)
-        except Exception as e:
+        except Exception:
             if retry_ > max_retry:
                 retry_ = 0
-                raise e
+                raise
             else:
                 retry_ += 1
                 time.sleep(1)
