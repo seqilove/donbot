@@ -7,6 +7,7 @@ from utils.utils import get_config
 
 NOINPUT = 'noinput'
 
+
 class MyIntParamType(click.ParamType):
     name = 'myinteger'
 
@@ -126,8 +127,9 @@ def cli(task, config, auto, duration, wait, max_click, skip, close, cashout, sol
         except KeyboardInterrupt:
             break
         except Exception as e:
+            # print(e)
             # raise
-            time.sleep(10)
+            time.sleep(60 * 10)
 
 
 if __name__ == '__main__':
