@@ -72,7 +72,6 @@ class SeleTask(object):
 
     def save_cookie(self):
         cookies = self.s.driver.get_cookies()
-        # cookies = [c for c in cookies if 'alexamaster.net' in c.get('domain')]
         with open(self.cookie_path, 'w') as fp:
             try:
                 json.dump(cookies, fp)
@@ -84,4 +83,3 @@ class SeleTask(object):
             os.remove(self.cookie_path)
         except:
             pass
-
