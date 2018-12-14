@@ -2,6 +2,7 @@ import datetime
 import json
 import os
 import random
+import re
 import sys
 import time
 from pathlib import Path
@@ -280,7 +281,6 @@ class Ameb(SeleTask):
                     self.s.driver.execute_script("arguments[0].click();", _next)
                 except (NoSuchElementException, TimeoutException, WebDriverException) as e:
                     self.s.driver.switch_to.default_content()
-                    # self.logger.exception(e)
                     self.logger.debug('Check: eb has no robot check')
         else:
             self.logger.debug('Check: eb_url not match, refresh')
@@ -294,7 +294,6 @@ class Ameb(SeleTask):
         while True:
             self.s.driver.switch_to.window(am_handle)
             if am_url == self.s.driver.current_url:
-                # if 'AWS Port.Refreshed' in self.s.driver.page_source:
                 if 'alexamaster' not in self.s.driver.page_source:
                     self.logger.debug('Check: am find wait page, refresh in 25 seconds')
                     time.sleep(25)
@@ -352,9 +351,6 @@ class Ameb(SeleTask):
         # pw_input.submit()
         _go = self.s.driver.find_element(*self.am_locators['go'])
         self.s.click(_go)
-        # self.s.click(_go, check=(lambda: self.s.find_element(self.am_locators['account'])))
-        # _account = self.s.find_element(self.am_locators['account'])
-        # self.s.click(_account)
         time.sleep(3)
         self.s.get(self.am_urls['account'])
 
@@ -501,6 +497,8 @@ class Ameb(SeleTask):
             self.logger.debug('Request money')
             self.s.driver.find_element(*self.am_locators['pay']).click()
             time.sleep(3)
+            last_pay = self.s.driver.find_element(By.XPATH, '//tbody/tr[1]').get_attribute('innerText')
+            self.send_tg_msg('Last pay: %s' % last_pay)
             _request = self.s.find_element(self.am_locators['request'])
             _request.click()
             # self.s.driver.find_element_by_link_text('Request').click()
@@ -610,7 +608,6 @@ class Ameb(SeleTask):
         length_element = self.s.driver.find_element(By.CLASS_NAME, 'ytp-time-duration')
         # length = length_element.text
         length = length_element.get_attribute('innerText')
-        # self.logger.debug(length_element)
         return length
 
     def get_right_length(self, length, no=1):
@@ -911,6 +908,7 @@ class Ameb(SeleTask):
         newargs = None
         _refresh = False
         default_args = [click, max_click, c_handle, ads, skip]
+
         def kill_f():
             self.s.kill()
             c_handle, ads = None, None
@@ -1039,7 +1037,15 @@ class Ameb(SeleTask):
                 self.s.get(self.eb_urls['login'])
             info = self.s.driver.find_element(By.ID, 'bonusguthaben')
             if info:
-                self.logger.debug('!!!Cash: %s', info.get_attribute('innerText'))
+                amount = info.get_attribute('innerText')
+                self.logger.debug('!!!Cash: %s', amount)
+                _match = re.match('\d+\.\d+', amount)
+                if _match:
+                    _amount = float(_match.group())
+                    if _amount >= 2:
+                        _date = arrow.now('Asia/Shanghai').date()
+                        _msg = '{} eb_{} {}'.format(_date, self.extra['eb_un'], amount)
+                        self.send_tg_msg(_msg)
         except NoSuchElementException:
             pass
 
@@ -1146,7 +1152,6 @@ class Ameb(SeleTask):
                                     ad_handle = self.s.driver.current_window_handle
                                     break
                     self.s.driver.switch_to.window(ad_handle)
-                    # self.s.wait().until(EC.text_to_be_present_in_element((By.ID, 'gutschrif'), 'have been booked'))
                     time.sleep(120)
                 elif 'only reading' in mail_element.get_attribute('innerText'):
                     self.logger.debug('only reading')
@@ -1277,8 +1282,6 @@ class Ameb(SeleTask):
                 if self.s.driver is None:
                     self.logger.debug('No browser')
                     self.s.start()
-                    # c_handle = self.s.driver.current_window_handle
-                    # self.am_visite_earn_page()
 
                 if start:
                     click, max_click, c_handle, ads, skip = newargs
