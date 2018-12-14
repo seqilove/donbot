@@ -106,10 +106,11 @@ def cli(task, config, auto, duration, wait, max_click, skip, close, cashout, sol
             elif task == 'eb_emu':
                 from apps.ameb import Ameb
                 solo = get_config_value(solo, 'solo', config, _default=True)
+                close = get_config_value(close, 'close', config, _default=False)
                 cron = get_config_value(cron, 'cron', config, _default=False)
                 duration = get_config_value(duration, 'duration', config, _default=None)
                 a = Ameb(config=config)
-                a.eb_emu(solo=solo, cron=cron, duration=duration)
+                a.eb_emu(solo=solo, close=close, cron=cron, duration=duration)
             elif task == 'ameb_emu':
                 from apps.ameb import Ameb
                 max_click = get_config_value(max_click, 'max_click', config, _default=None)
