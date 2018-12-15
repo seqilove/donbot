@@ -7,6 +7,7 @@ from utils.utils import get_config
 
 NOINPUT = 'noinput'
 
+
 class MyIntParamType(click.ParamType):
     name = 'myinteger'
 
@@ -30,7 +31,7 @@ class MyBoolParamType(click.ParamType):
         if isinstance(value, bool):
             return bool(value)
         value = value.lower()
-        if value in ('true', 't' '1', 'yes', 'y'):
+        if value in ('true', 't', '1', 'yes', 'y'):
             return True
         elif value in ('false', 'f', '0', 'no', 'n'):
             return False
@@ -105,10 +106,11 @@ def cli(task, config, auto, duration, wait, max_click, skip, close, cashout, sol
             elif task == 'eb_emu':
                 from apps.ameb import Ameb
                 solo = get_config_value(solo, 'solo', config, _default=True)
+                close = get_config_value(close, 'close', config, _default=False)
                 cron = get_config_value(cron, 'cron', config, _default=False)
                 duration = get_config_value(duration, 'duration', config, _default=None)
                 a = Ameb(config=config)
-                a.eb_emu(solo=solo, cron=cron, duration=duration)
+                a.eb_emu(solo=solo, close=close, cron=cron, duration=duration)
             elif task == 'ameb_emu':
                 from apps.ameb import Ameb
                 max_click = get_config_value(max_click, 'max_click', config, _default=None)
@@ -126,8 +128,9 @@ def cli(task, config, auto, duration, wait, max_click, skip, close, cashout, sol
         except KeyboardInterrupt:
             break
         except Exception as e:
+            # print(e)
             # raise
-            time.sleep(10)
+            time.sleep(60 * 10)
 
 
 if __name__ == '__main__':

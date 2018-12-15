@@ -1,6 +1,8 @@
 import datetime
+import json
 import os
 import random
+import re
 import sys
 import time
 from pathlib import Path
@@ -8,8 +10,14 @@ from pathlib import Path
 import arrow
 
 from selenium.common.exceptions import (
-    NoSuchElementException, NoSuchFrameException, NoSuchWindowException, TimeoutException, WebDriverException, StaleElementReferenceException,
-    UnexpectedAlertPresentException
+    NoSuchElementException,
+    NoSuchFrameException,
+    NoSuchWindowException,
+    TimeoutException,
+    WebDriverException,
+    StaleElementReferenceException,
+    UnexpectedAlertPresentException,
+    ElementNotInteractableException
 )
 from selenium.webdriver.common.action_chains import ActionChains as AC
 from selenium.webdriver.common.by import By
@@ -39,7 +47,7 @@ class Ameb(SeleTask):
         'account': (By.LINK_TEXT, 'Go to my account!'),
         'profile': (By.LINK_TEXT, 'My Profile'),
         'earn': (By.LINK_TEXT, 'Earn Points'),
-        'pay': (By.LINK_TEXT, 'Make Money'),
+        'pay': (By.LINK_TEXT, 'Withdraw Money'),
         'request': (By.XPATH, "//a[@href='payout_add.php']"),
         'fall': (By.ID, 'fall'),
         'ads': (By.XPATH, "./li[.//div/a[contains(@onclick, 'open')]]"),
@@ -57,6 +65,7 @@ class Ameb(SeleTask):
         'earn': 'https://www.alexamaster.net/a/earn_points.php',
         'pay': 'https://www.alexamaster.net/a/payout_list.php',
         'surf': 'https://www.alexamaster.net/Master/',
+        'register': 'https://www.alexamaster.net/sec/register.php',
     }
 
     eb_locators = {
@@ -113,12 +122,18 @@ class Ameb(SeleTask):
     def ameb(self, cron=False, duration=None, wait=None):
         am_url = self.extra.get('am_url')
         if am_url:
-            am_url = self.am_urls['surf'] + am_url
+            if am_url.startswith(self.am_urls['surf']):
+                pass
+            else:
+                am_url = self.am_urls['surf'] + am_url
         eb_url = self.extra.get('eb_url')
         if eb_url:
-            eb_url = self.eb_urls['surf'] + eb_url
+            if eb_url.startswith(self.eb_urls['surf']):
+                pass
+            else:
+                eb_url = self.eb_urls['surf'] + eb_url
 
-        if am_url is None and eb_url is None:
+        if not am_url and not eb_url:
             self.logger.debug('Please set at least one, am_url and eb_url')
             self.logger.debug('Exit')
             self.s.kill()
@@ -254,17 +269,18 @@ class Ameb(SeleTask):
                     _frame = self.s.driver.find_element(By.ID, 'frame0')
                     self.s.driver.switch_to.frame(_frame)
                     title = self.s.driver.find_element(By.TAG_NAME, 'title')
-                    self.logger.debug(title.text)
+                    self.logger.debug(title.get_attribute('innerText'))
                     _human = self.s.driver.find_element(By.XPATH, '//input[@value="I am a human!"]')
                     self.logger.debug('Check: eb has robot check!!!')
-                    _human.click()
+                    # _human.click()
+                    self.s.driver.execute_script("arguments[0].click();", _human)
                     time.sleep(5)
                     self.s.driver.switch_to.default_content()
                     _next = self.s.wait().until(EC.presence_of_element_located((By.XPATH, '//span[@id="skip"]/a')))
-                    _next.click()
+                    # _next.click()
+                    self.s.driver.execute_script("arguments[0].click();", _next)
                 except (NoSuchElementException, TimeoutException, WebDriverException) as e:
                     self.s.driver.switch_to.default_content()
-                    # self.logger.exception(e)
                     self.logger.debug('Check: eb has no robot check')
         else:
             self.logger.debug('Check: eb_url not match, refresh')
@@ -278,7 +294,6 @@ class Ameb(SeleTask):
         while True:
             self.s.driver.switch_to.window(am_handle)
             if am_url == self.s.driver.current_url:
-                # if 'AWS Port.Refreshed' in self.s.driver.page_source:
                 if 'alexamaster' not in self.s.driver.page_source:
                     self.logger.debug('Check: am find wait page, refresh in 25 seconds')
                     time.sleep(25)
@@ -299,6 +314,28 @@ class Ameb(SeleTask):
                 continue
         self.logger.debug('Check: am_check done')
 
+    def am_register(self):
+        self.s.get(self.am_urls['register'])
+        first_name = self.s.find_element(By.XPATH, '//input[contains(@placeholder, "Your first name")]')
+        surname = self.s.find_element(By.XPATH, '//input[contains(@placeholder, "Your surname")]')
+        username = self.s.find_element(By.XPATH, '//input[contains(@placeholder, "Your email address")]')
+        password = self.s.find_element(*self.am_lacators['password'])
+        self.s.clear(first_name)
+        first_name.send_keys(self.extra['am_fn'])
+        time.sleep(1)
+        self.s.clear(surname)
+        surname.send_keys(self.extra['am_sn'])
+        time.sleep(1)
+        self.s.clear(username)
+        username.send_keys(self.extra['am_un'])
+        time.sleep(1)
+        self.s.clear(password)
+        password.send_keys(self.extra['am_pw'])
+        checkbox = self.s.find_element(By.XPATH, '//input[@type="password"]')
+        checkbox.click()
+        time.sleep(3)
+        _go = self.s.driver.find_element(*self.am_locators['go'])
+        self.s.click(_go)
 
     def am_login(self):
         self.s.get(self.am_urls['home'])
@@ -311,19 +348,58 @@ class Ameb(SeleTask):
         un_input.send_keys(self.extra['am_un'])
         self.s.clear(pw_input)
         pw_input.send_keys(self.extra['am_pw'])
+        # pw_input.submit()
         _go = self.s.driver.find_element(*self.am_locators['go'])
-        self.s.click(_go, check=(lambda: self.s.find_element(self.am_locators['account'])))
-        # _account = self.s.find_element(self.am_locators['account'])
-        # self.s.click(_account)
+        self.s.click(_go)
+        time.sleep(3)
         self.s.get(self.am_urls['account'])
+
+    def add_cookie(self):
+        cookies = None
+        if self.cookie_path.exists():
+            with open(self.cookie_path, 'r') as fp:
+                try:
+                    cookies = json.load(fp)
+                except json.JSONDecodeError:
+                    self.delete_cookie()
+        if cookies:
+            for c in cookies:
+                if c.get('domain').startswith('.'):
+                    c['domain'] = c['domain'].split('.', 1)[-1]
+                self.s.driver.add_cookie(c)
+
+    def save_cookie(self):
+        cookies = self.s.driver.get_cookies()
+        # cookies = [c for c in cookies if 'alexamaster.net' in c.get('domain')]
+        with open(self.cookie_path, 'w') as fp:
+            try:
+                json.dump(cookies, fp)
+            except Exception:
+                pass
 
     def am_visite_earn_page(self):
         self.s.get(self.am_urls['earn'])
-        if self.am_urls['earn'] not in self.s.driver.current_url:
-            self.am_login()
-            _earn = self.s.find_element(self.am_locators['earn'])
-            # self.s.click(_earn)
-            self.s.get(self.am_urls['earn'])
+        time.sleep(5)
+        logged = False
+        login_action = False
+        while not logged:
+            if self.s.driver.current_url == self.am_urls['earn']:
+                logged = True
+                if login_action:
+                    self.save_cookie()
+            else:
+                login_action = False
+                self.add_cookie()
+                self.s.get(self.am_urls['earn'])
+                time.sleep(5)
+            if self.s.driver.current_url == self.am_urls['earn']:
+                logged = True
+            else:
+                self.delete_cookie()
+                self.am_login()
+                login_action = True
+                self.s.get(self.am_urls['earn'])
+                time.sleep(5)
 
     def am_get_next_ads(self, ads):
         _tries = 3
@@ -333,6 +409,7 @@ class Ameb(SeleTask):
                 self.am_clean_swal2()
                 if ads is None:
                     self.am_scroll()
+                    time.sleep(5)
                     fall = self.s.driver.find_element(*self.am_locators['fall'])
                     ads = fall.find_element(*self.am_locators['ads'])
                 else:
@@ -349,7 +426,9 @@ class Ameb(SeleTask):
         return ads
 
     def am_scroll(self):
-        self.s.driver.execute_script('var toe = document.getElementById("toe");toe.scrollIntoView({block: "end", behavior: "smooth"});')
+        self.s.driver.execute_script(
+            'var toe = document.getElementById("toe");toe.scrollIntoView({block: "end", behavior: "smooth"});'
+        )
         time.sleep(random.randint(5, 8))
 
     def am_daily_check(self):
@@ -384,7 +463,7 @@ class Ameb(SeleTask):
                     self.s.driver.execute_script('dailyBonus(this);')
                     time.sleep(random.randint(3, 5))
                     try_tomorrow = self.s.driver.find_element(By.XPATH, '//div[@class="swal2-content"]/h4')
-                    if try_tomorrow.text == 'Please try again tomorrow!':
+                    if try_tomorrow.get_attribute('innerText') == 'Please try again tomorrow!':
                         self.s.driver.find_element(By.CLASS_NAME, 'swal2-confirm').click()
                         self.logger.debug('Please try again tomorrow!')
 
@@ -397,7 +476,7 @@ class Ameb(SeleTask):
 
     def am_get_total_points(self):
         try:
-            points = self.s.driver.find_element(By.ID, 'pts-left').text
+            points = self.s.driver.find_element(By.ID, 'pts-left').get_attribute('innerText')
         except NoSuchElementException:
             points = '0'
         return points
@@ -418,19 +497,21 @@ class Ameb(SeleTask):
             self.logger.debug('Request money')
             self.s.driver.find_element(*self.am_locators['pay']).click()
             time.sleep(3)
+            last_pay = self.s.driver.find_element(By.XPATH, '//tbody/tr[1]').get_attribute('innerText')
+            self.send_tg_msg('Last pay: %s' % last_pay)
             _request = self.s.find_element(self.am_locators['request'])
             _request.click()
             # self.s.driver.find_element_by_link_text('Request').click()
             # card = self.s.driver.find_element(By.CLASS_NAME, 'card')
             card = self.s.find_element((By.CLASS_NAME, 'card'))
             card_head = card.find_element(By.CLASS_NAME, 'card-header')
-            if card_head.text == 'You have to satisfy our requirements':
+            if card_head.get_attribute('innerText') == 'You have to satisfy our requirements':
                 fail_infos = card.find_elements(
                     By.XPATH, './div[@class="card-content"]//tbody/tr[./td/b[@class="text-danger"]]/td[1]'
                 )
-                fail_text = [info.text for info in fail_infos]
+                fail_text = [info.get_attribute('innerText') for info in fail_infos]
                 self.logger.debug(fail_text)
-            elif card_head.text == 'Fill the form carefully':
+            elif card_head.get_attribute('innerText') == 'Fill the form carefully':
                 _amount = self.am_get_points(points) // 30000
                 if _amount > 10:
                     _amount = '10'
@@ -451,7 +532,7 @@ class Ameb(SeleTask):
                     success = self.s.wait().until(
                         EC.presence_of_element_located((By.CLASS_NAME, 'swal2-content'))
                     )
-                    if success.text == 'Processed Successfully !!!':
+                    if success.get_attribute('innerText') == 'Processed Successfully !!!':
                         self.s.driver.find_element(By.CLASS_NAME, 'swal2-confirm').click()
                         self.logger.debug('Cash out success.')
                         _date = arrow.now('Asia/Shanghai').date()
@@ -485,12 +566,12 @@ class Ameb(SeleTask):
                 cancel = None
 
             if confirm and confirm.is_displayed() and confirm.is_enabled():
-                if confirm.text in ['Quit', 'Good', 'OK']:
+                if confirm.get_attribute('innerText') in ['Quit', 'Good', 'OK']:
                     confirm.click()
             else:
                 confirm_checked = True
             if cancel and cancel.is_displayed() and cancel.is_enabled():
-                if cancel.text in ['Quit']:
+                if cancel.get_attribute('innerText') in ['Quit']:
                     cancel.click()
             else:
                 cancel_checked = True
@@ -525,37 +606,40 @@ class Ameb(SeleTask):
 
     def get_ytb_length(self):
         length_element = self.s.driver.find_element(By.CLASS_NAME, 'ytp-time-duration')
-        length = length_element.text
-        # length = length.split(':')
-        # if len(length) >= 2:
-        #     length = int(length[-2])
-        # else:
-        #     length = -1
+        # length = length_element.text
+        length = length_element.get_attribute('innerText')
         return length
 
-    def get_right_length(self, length):
-        # if length < 0:
-        #     return '6'
-        # elif length < 5:
-        #     return '0'
-        # elif length < 10:
-        #     return '1'
-        # elif length < 15:
-        #     return '2'
-        # elif length < 25:
-        #     return '3'
-        # elif length < 45:
-        #     return '4'
-        # else:
-        #     return '5'
-        format_length = ['00', '00', '00']
-        split_length = length.split(':')
-        r_length = reversed(split_length)
-        for i, l in enumerate(r_length):
-            if len(l) == 1:
-                l = '0' + l
-            format_length[i] = l
-        return ':'.join(reversed(format_length))
+    def get_right_length(self, length, no=1):
+        if no == 1:
+            length = length.split(':')
+            if len(length) >= 2:
+                length = int(length[-2])
+            else:
+                length = -1
+            if length < 0:
+                return '6'
+            elif length < 5:
+                return '0'
+            elif length < 10:
+                return '1'
+            elif length < 15:
+                return '2'
+            elif length < 25:
+                return '3'
+            elif length < 45:
+                return '4'
+            else:
+                return '5'
+        elif no == 2:
+            format_length = ['00', '00', '00']
+            split_length = length.split(':')
+            r_length = reversed(split_length)
+            for i, l in enumerate(r_length):
+                if len(l) == 1:
+                    l = '0' + l
+                format_length[i] = l
+            return ':'.join(reversed(format_length))
 
     def get_bgcolor(self):
         try:
@@ -634,21 +718,25 @@ class Ameb(SeleTask):
                             _new_handle = _new_open_handles[0]
                     else:
                         continue
+                    time.sleep(random.randint(3, 6))
                     self.logger.debug('Switch to new window')
                     while True:
                         try:
                             self.s.driver.switch_to.window(_new_handle)
-                            time.sleep(random.randint(15, 20))
+                            time.sleep(random.randint(20, 30))
                             bgcolor = self.get_bgcolor()
                             break
                         except UnexpectedAlertPresentException:
                             self.s.close_alert()
                     self.logger.debug('Get bgcolor %s, and back to c_handle', bgcolor)
                     self.s.driver.switch_to.window(c_handle)
+                    time.sleep(random.randint(3, 6))
                     good = self.s.wait().until(EC.presence_of_element_located(self.am_locators['confirm']))
+                    time.sleep(random.randint(3, 6))
                     self.s.wait().until(EC.text_to_be_present_in_element(self.am_locators['confirm'], 'Good'))
                     time.sleep(2)
                     good.click()
+                    time.sleep(random.randint(3, 6))
                     color_select = self.s.wait().until(EC.presence_of_element_located((By.ID, 'backcol')))
                     color_select = Select(color_select)
                     color_values = ['#' + c.get_attribute('value') for c in color_select.options]
@@ -693,23 +781,36 @@ class Ameb(SeleTask):
                             _new_handle = _new_open_handles[0]
                     else:
                         continue
+                    time.sleep(random.randint(3, 6))
                     self.logger.debug('Switch to new window')
                     self.s.driver.switch_to.window(_new_handle)
-                    time.sleep(random.randint(15, 20))
+                    time.sleep(random.randint(20, 30))
                     length = self.get_ytb_length()
                     self.logger.debug('Get video length %s, and back to c_handle', length)
                     self.s.driver.switch_to.window(c_handle)
+                    time.sleep(random.randint(3, 6))
                     length_select = self.s.wait().until(EC.presence_of_element_located((By.ID, 'vlen')))
                     length_select = Select(length_select)
-                    right_lengt = self.get_right_length(length)
-                    time.sleep(2)
-                    length_select.select_by_value(right_lengt)
+                    try:
+                        right_lengt = self.get_right_length(length, no=1)
+                        time.sleep(2)
+                        length_select.select_by_value(right_lengt)
+                    except NoSuchElementException:
+                        try:
+                            right_lengt = self.get_right_length(length, no=2)
+                            time.sleep(2)
+                            length_select.select_by_value(right_lengt)
+                        except NoSuchElementException:
+                            self.logger.debug('Can\'t get right length.')
+                            continue
                     time.sleep(1)
                     length_submit = self.s.driver.find_element(*self.am_locators['confirm'])
-                    length_submit.click()
+                    # length_submit.click()
+                    self.s.driver.execute_script("arguments[0].click();", length_submit)
+                    time.sleep(random.randint(3, 6))
                     self.logger.debug('Ok, clean mess')
                     self.s.close_handles(self.s.driver.window_handles, exclude=[c_handle])
-                    time.sleep(1)
+                    time.sleep(random.randint(2, 4))
                     self.logger.debug('go to c_handle')
                     self.s.driver.switch_to.window(c_handle)
                 except SkipAdsException:
@@ -733,7 +834,8 @@ class Ameb(SeleTask):
                     self.s.driver.switch_to.window(c_handle)
                     self.logger.debug('Check swal pop and clean it')
                     self.am_clean_swal2()
-                    ads_inner.click()
+                    # ads_inner.click()
+                    self.s.driver.execute_script("arguments[0].click();", ads_inner)
                     if self.s.wait().until(new_windows_opened(_handles)):
                         _new_open_handles = [h for h in self.s.driver.window_handles if h not in _handles]
                         if len(_new_open_handles) == 0:
@@ -806,17 +908,16 @@ class Ameb(SeleTask):
         newargs = None
         _refresh = False
         default_args = [click, max_click, c_handle, ads, skip]
+
+        def kill_f():
+            self.s.kill()
+            c_handle, ads = None, None
+            time.sleep(10)
         while True:
             try:
-                # if new:
-                #     newargs = [click, max_click, c_handle, ads, skip]
-                #     new = False
-
                 if self.s.driver is None:
                     self.logger.debug('No browser')
                     self.s.start()
-                    # c_handle = self.s.driver.current_window_handle
-                    # self.am_visite_earn_page()
 
                 if start:
                     click, max_click, c_handle, ads, skip = default_args
@@ -847,11 +948,18 @@ class Ameb(SeleTask):
 
                 if start:
                     if cashout:
-                        self.am_cashout()
+                        try:
+                            self.am_cashout()
+                        except Exception as e:
+                            self.logger.exception(e)
                     self.am_daily_check()
 
                     self.logger.debug(
-                        'Task: %s, Click: %s, Max_click: %s, Duration: %s', self.task_name, click, max_click, duration / 60
+                        'Task: %s, Click: %s, Max_click: %s, Duration: %s',
+                        self.task_name,
+                        click,
+                        max_click,
+                        duration / 60
                     )
                     self.br_logger()
 
@@ -859,12 +967,11 @@ class Ameb(SeleTask):
 
                 if click == max_click:
                     if close:
-                        self.s.kill()
+                        kill_f()
                     start = True
                     self.logger.debug('Finish, wait %s minutes to continue...', duration / 60)
                     time.sleep(duration)
                     continue
-                    # time.sleep(10)
                 elif click % 20 == 0:
                     time.sleep(random.randint(3, 5))
                     self.logger.debug('Refresh page')
@@ -878,13 +985,10 @@ class Ameb(SeleTask):
                 if self.am_urls['earn'] not in self.s.driver.current_url:
                     self.am_visite_earn_page()
 
-                # if ads is None:
-                #     self.am_scroll()
-                # ads = retry(NoSuchElementException, hook=self.am_scroll, allfailcb=lambda: self.am_raise_webdriver("Can't find ads"))(self.am_get_next_ads)(ads)
                 ads = self.am_get_next_ads(ads)
                 if ads is None:
                     self.am_raise_webdriver("Can't find ads")
-                ads_point = ads.find_element(By.XPATH, './/h4').text
+                ads_point = ads.find_element(By.XPATH, './/h4').get_attribute('innerText')
                 if ads_point != '1 Points':
                     self.am_process_ads(ads, skip=skip)
                     click += 1
@@ -897,9 +1001,7 @@ class Ameb(SeleTask):
             except (ConnectionRefusedError):
                 self.logger.debug('Connection refused error, retry')
                 time.sleep(10)
-                self.s.kill()
-                c_handle, ads = None, None
-                time.sleep(10)
+                kill_f()
             except SkipAdsException:
                 time.sleep(random.randint(3, 5))
             except StaleElementReferenceException as e:
@@ -913,22 +1015,18 @@ class Ameb(SeleTask):
                     ads = None
                 elif e.msg in self.errors['b']:
                     self.logger.debug('Error: %s, retry', e.msg)
-                    time.sleep(10)
-                    self.s.kill()
-                    c_handle, ads = None, None
-                    time.sleep(10)
+                    kill_f()
                 else:
                     self.logger.exception(e)
-                    time.sleep(10)
-                    self.s.kill()
+                    kill_f()
                     raise
             except KeyboardInterrupt:
                 self.logger.debug('quit')
-                self.s.kill()
+                kill_f()
                 raise
             except Exception as e:
                 self.logger.exception(e)
-                self.s.kill()
+                kill_f()
                 raise
 
             self.br_logger()
@@ -939,114 +1037,83 @@ class Ameb(SeleTask):
                 self.s.get(self.eb_urls['login'])
             info = self.s.driver.find_element(By.ID, 'bonusguthaben')
             if info:
-                self.logger.debug('!!!Cash: %s', info.text)
+                amount = info.get_attribute('innerText')
+                self.logger.debug('!!!Cash: %s', amount)
+                _match = re.match('\d+\.\d+', amount)
+                if _match:
+                    _amount = float(_match.group())
+                    if _amount >= 2:
+                        _date = arrow.now('Asia/Shanghai').date()
+                        _msg = '{} eb_{} {}'.format(_date, self.extra['eb_un'], amount)
+                        self.send_tg_msg(_msg)
         except NoSuchElementException:
             pass
-
-    # def eb_login(self):
-    #     r = 2
-    #     status = 0
-    #     while True:
-    #         try:
-    #             if self.s.driver.current_url != self.eb_urls['login']:
-    #                 self.s.get(self.eb_urls['login'])
-    #                 # continue
-    #             login_info = self.s.driver.find_element(By.ID, 'login_info')
-    #             if login_info.text:
-    #                 self.logger.debug('Ebesucher %s', login_info.text)
-    #                 status = 1
-    #                 self.eb_get_info()
-    #                 break
-    #             else:
-    #                 if r == 0:
-    #                     self.logger.debug('Ebesucher login error')
-    #                     break
-    #                 un_input = self.s.driver.find_element(*self.eb_locators['username'])
-    #                 pw_input = self.s.driver.find_element(*self.eb_locators['password'])
-    #                 self.s.clear(un_input)
-    #                 un_input.send_keys(self.extra['eb_un'])
-    #                 self.s.clear(pw_input)
-    #                 pw_input.send_keys(self.extra['eb_pw'])
-    #                 pw_input.submit()
-    #                 r -= 1
-    #                 time.sleep(5)
-    #         except NoSuchElementException:
-    #             pass
-
-    #     return status
 
     def eb_login(self):
         r = 2
         status = 0
         while True:
+            if self.extra['eb_un'] in self.s.driver.page_source:
+                status = 1
+                break
             try:
-                if self.s.driver.current_url != self.eb_urls['login']:
-                    self.s.get(self.eb_urls['login'])
-                    # continue
-                try:
-                    if r == 0:
-                        self.logger.debug('Ebesucher login error')
-                        break
-                    un_input = self.s.driver.find_element(*self.eb_locators['username'])
-                    pw_input = self.s.driver.find_element(*self.eb_locators['password'])
-                    self.s.clear(un_input)
-                    un_input.send_keys(self.extra['eb_un'])
-                    self.s.clear(pw_input)
-                    pw_input.send_keys(self.extra['eb_pw'])
-                    pw_input.submit()
-                    r -= 1
-                    time.sleep(5)
-                except NoSuchElementException:
-                    status = 1
+                if r == 0:
+                    self.logger.debug('Ebesucher login error')
                     break
+                self.s.get(self.eb_urls['login'])
+                un_input = self.s.driver.find_element(*self.eb_locators['username'])
+                pw_input = self.s.driver.find_element(*self.eb_locators['password'])
+                self.s.clear(un_input)
+                un_input.send_keys(self.extra['eb_un'])
+                self.s.clear(pw_input)
+                pw_input.send_keys(self.extra['eb_pw'])
+                pw_input.submit()
+                r -= 1
+                time.sleep(5)
             except NoSuchElementException:
-                pass
-
+                status = 1
+                break
         return status
 
     def eb_get_mails(self):
         mails = None
         while True:
+            self.s.get(self.eb_urls['inbox'])
+            if not self.eb_login():
+                break
+            self.s.get(self.eb_urls['inbox'])
+            time.sleep(5)
+
             try:
-                if self.s.driver.current_url != self.eb_urls['inbox']:
-                    self.s.get(self.eb_urls['inbox'])
-                    if self.s.driver.current_url != self.eb_urls['inbox']:
-                        if not self.eb_login():
-                            break
-                        self.s.get(self.eb_urls['inbox'])
+                hide_button = self.s.driver.find_element(By.ID, 'hide_button')
+                if hide_button.get_attribute('innerText') == 'Hide all read emails':
+                    # hide_button.click()
+                    self.s.driver.execute_script("arguments[0].click();", hide_button)
                     time.sleep(5)
                     continue
+                elif hide_button.get_attribute('innerText') == 'Show all read emails':
+                    try:
+                        entries_select = self.s.driver.find_element(By.NAME, 'example_length')
+                        entries_select = Select(entries_select)
+                        entries_select.select_by_value('100')
+                    except NoSuchElementException:
+                        pass
+                    except ElementNotInteractableException:
+                        break
+                    time.sleep(5)
+            except NoSuchElementException:
+                break
 
-                try:
-                    hide_button = self.s.driver.find_element(By.ID, 'hide_button')
-                    if hide_button.text == 'Hide all read emails':
-                        hide_button.click()
-                        time.sleep(5)
-                        continue
-                    elif hide_button.text == 'Show all read emails':
-                        try:
-                            entries_select = self.s.driver.find_element(By.NAME, 'example_length')
-                            entries_select = Select(entries_select)
-                            entries_select.select_by_value('100')
-                        except NoSuchElementException:
-                            pass
-                        time.sleep(5)
-                except NoSuchElementException:
-                    break
+            try:
+                example = self.s.find_element((By.ID, 'example'))
+                if example.is_displayed():
+                    # examples = example.find_elements(By.XPATH, '//tr/td[1]//a')
+                    # mails = [mail.get_attribute('href') for mail in examples]
+                    mails = example.find_elements(By.XPATH, '//tr/td[1]//a')
+                break
+            except NoSuchElementException:
+                break
 
-                try:
-                    example = self.s.find_element((By.ID, 'example'))
-                    if example.is_displayed():
-                        # examples = example.find_elements(By.XPATH, '//tr/td[1]//a')
-                        # mails = [mail.get_attribute('href') for mail in examples]
-                        mails = example.find_elements(By.XPATH, '//tr/td[1]//a')
-                    break
-                except NoSuchElementException:
-                    break
-
-            except Exception as e:
-                self.logger.exception(e)
-                raise
         return mails
 
     def eb_check_mail(self, eb_handle, mail):
@@ -1056,7 +1123,8 @@ class Ameb(SeleTask):
             try:
                 self.s.driver.switch_to.window(eb_handle)
                 _windows = self.s.driver.window_handles
-                mail.click()
+                # mail.click()
+                self.s.driver.execute_script("arguments[0].click();", mail)
                 _new_open_windows = self.s.wait().until(new_windows_opened(_windows))
                 time.sleep(5)
                 if _new_open_windows:
@@ -1067,12 +1135,13 @@ class Ameb(SeleTask):
                             break
                 self.s.driver.switch_to.window(mail_handle)
                 mail_element = self.s.driver.find_element(By.ID, 'ebesuchermailtextcontainer')
-                if 'read and stay on the site for at least' in mail_element.text:
+                if 'read and stay on the site for at least' in mail_element.get_attribute('innerText'):
                     self.logger.debug('read and stay on the site')
                     first_link = self.s.find_element((By.XPATH, '//a[contains(@href, "ebesucher.com/mailcheck.php")]'))
                     first_link_target = first_link.get_attribute('target')
                     _windows = self.s.driver.window_handles
-                    first_link.click()
+                    # first_link.click()
+                    self.s.driver.execute_script("arguments[0].click();", first_link)
                     ad_handle = mail_handle
                     if first_link_target == '_blank':
                         _new_open_windows = self.s.wait().until(new_windows_opened(_windows))
@@ -1083,9 +1152,8 @@ class Ameb(SeleTask):
                                     ad_handle = self.s.driver.current_window_handle
                                     break
                     self.s.driver.switch_to.window(ad_handle)
-                    # self.s.wait().until(EC.text_to_be_present_in_element((By.ID, 'gutschrif'), 'have been booked'))
                     time.sleep(120)
-                elif 'only reading' in mail_element.text:
+                elif 'only reading' in mail_element.get_attribute('innerText'):
                     self.logger.debug('only reading')
                     time.sleep(20)
 
@@ -1098,6 +1166,9 @@ class Ameb(SeleTask):
                 break
             finally:
                 self.s.close_handles(self.s.driver.window_handles, exclude=default_handles)
+
+    def eb_delete_mail(self):
+        style = 'font-weight: bold;'
 
     def eb_emu(self, solo=True, close=False, cron=False, duration=None):
         if self.extra.get('eb_un') is None or self.extra.get('eb_pw') is None:
@@ -1135,10 +1206,12 @@ class Ameb(SeleTask):
                     for mail in mails:
                         self.eb_check_mail(eb_handle, mail)
                         time.sleep(5)
+                    mails = None
                     self.logger.debug('Ebsucher mail check done')
                 if solo:
                     if cron:
                         self.s.kill()
+                        eb_handle, mails = (None, None)
                         sys.exit()
                     else:
                         if duration is None:
@@ -1157,6 +1230,7 @@ class Ameb(SeleTask):
                         pass
                     else:
                         self.s.kill()
+                        eb_handle, mails = (None, None)
                     self.logger.debug('Exit')
                     raise
                 else:
@@ -1183,7 +1257,12 @@ class Ameb(SeleTask):
                     time.sleep(5)
             except Exception as e:
                 self.logger.exception(e)
-                time.sleep(5)
+                if solo:
+                    time.sleep(5)
+                    self.s.kill()
+                    eb_handle, mails = (None, None)
+                    time.sleep(5)
+                continue
 
     def ameb_emu(self, max_click=None, duration=None, skip=None, close=False, cashout=True):
         click = 0
@@ -1203,8 +1282,6 @@ class Ameb(SeleTask):
                 if self.s.driver is None:
                     self.logger.debug('No browser')
                     self.s.start()
-                    # c_handle = self.s.driver.current_window_handle
-                    # self.am_visite_earn_page()
 
                 if start:
                     click, max_click, c_handle, ads, skip = newargs
@@ -1239,7 +1316,11 @@ class Ameb(SeleTask):
                     self.am_daily_check()
 
                     self.logger.debug(
-                        'Task: %s, Click: %s, Max_click: %s, Duration: %s', self.task_name, click, max_click, duration / 60
+                        'Task: %s, Click: %s, Max_click: %s, Duration: %s',
+                        self.task_name,
+                        click,
+                        max_click,
+                        duration / 60
                     )
                     self.br_logger()
 
@@ -1269,13 +1350,10 @@ class Ameb(SeleTask):
                 if self.am_urls['earn'] not in self.s.driver.current_url:
                     self.am_visite_earn_page()
 
-                # if ads is None:
-                #     self.am_scroll()
-                # ads = retry(NoSuchElementException, hook=self.am_scroll, allfailcb=lambda: self.am_raise_webdriver("Can't find ads"))(self.am_get_next_ads)(ads)
                 ads = self.am_get_next_ads(ads)
                 if ads is None:
                     self.am_raise_webdriver("Can't find ads")
-                ads_point = ads.find_element(By.XPATH, './/h4').text
+                ads_point = ads.find_element(By.XPATH, './/h4').get_attribute('innerText')
                 if ads_point != '1 Points':
                     self.am_process_ads(ads, skip=skip)
                     click += 1
@@ -1284,7 +1362,6 @@ class Ameb(SeleTask):
                     self.file_logger.info('Points: %s', current_points)
                 else:
                     click = max_click
-
 
             except KeyboardInterrupt:
                 self.s.kill()

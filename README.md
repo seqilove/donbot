@@ -12,6 +12,15 @@ download geckodriver from https://github.com/mozilla/geckodriver/releases and in
 
 if you want use telegram notification, set telegram config at utils/telegram.cfg, you can find help info at https://github.com/LonamiWebs/Telethon
 
+## Install with Docker
+1. Install docker
+2. git clone https://github.com/fakedon/donbot.git
+3. modify the config files under ./cfg/
+3. cd donbot && docker build -t donbot .
+4. docker run -it --shm-size=1024m -p 5910:5901 -p 6910:6901 -e VNC_PW=yourpassword donbot bash
+
+More info about this docker, read [https://github.com/ConSol/docker-headless-vnc-container](https://github.com/ConSol/docker-headless-vnc-container)
+
 ## How to use
 `python run.py OPTIONS`
 ### Options
@@ -19,10 +28,6 @@ if you want use telegram notification, set telegram config at utils/telegram.cfg
 -t --task empty          if you set this option, this will just run an empty firefox instance
 
 # you can use yes y true t or 1 for YES, and no n false f or 0 for NO.
-
-Koinme
--c --config default.cfg#4
--a YES or NO             if your account can auto view, choose YES, or choose NO
 
 Ameb
 # Run am autoview and eb autoview in one firefox
